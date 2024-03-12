@@ -1,0 +1,6 @@
+{   
+  "remappings": [ 
+    "@openzeppelin/=/share/node_modules/@openzeppelin/", 
+    "abdk-libraries-solidity/=/share/node_modules/abdk-libraries-solidity/" 
+  ]
+}
