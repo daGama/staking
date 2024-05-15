@@ -184,6 +184,10 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         Staker[] storage stakes = stakers[msg.sender];
         if (stakes.length < index_ + 1) revert StakeNotFound();
         if (stakes[index_].unstaked) revert AlreadyUnstaked();
+        if (
+            block.timestamp <
+            stakes[index_].startTime + stakes[index_].duration * 1 weeks
+        ) revert NotYetMatured();
 
         uint256 unstakedAmount = stakes[index_].stakeAmount;
         uint256 claimedAmount = stakes[index_].rewardAmount;
@@ -202,12 +206,15 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         );
 
         totalWeight -= stakes[index_].weightAmount;
+        totalStaked -= unstakedAmount;
+
         stakes[index_].stakeAmount = 0;
         stakes[index_].rewardAmount = 0;
         stakes[index_].claimed = true;
         stakes[index_].unstaked = true;
 
         totalWeight += weightAmount;
+        totalStaked += stakedAmount;
 
         Staker memory newStaker = Staker(
             stakedAmount,

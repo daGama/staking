@@ -197,8 +197,14 @@ describe("Staking contract", function () {
 
       const reward = 4450;
 
+      const totalStaked = await staking.totalStaked()
+      expect(totalStaked).to.equal(stakeAmount);
+
       // restake
       await expect(staking.restake(0, constrDuration)).to.emit(staking, "Restaked").withArgs(owner, stakeAmount + reward);
+
+      const totalStakedAfterRestake = await staking.totalStaked()
+      expect(totalStakedAfterRestake).to.equal(stakeAmount + reward);
 
       const staker = await staking.getStaker(owner.address);
       expect(staker.length).to.equal(2);
@@ -225,7 +231,7 @@ describe("Staking contract", function () {
       await expect(staking.claimReward(0)).to.be.revertedWithCustomError(staking, 'StakeNotFound');
     });
 
-    it("Should revert error NotYetMatured", async function () {
+    it("Should revert error NotYetMatured on unstake", async function () {
       const { staking, tokenERC20 } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 1e5;
@@ -235,6 +241,18 @@ describe("Staking contract", function () {
       await mine(10);
 
       await expect(staking.claimReward(0)).to.be.revertedWithCustomError(staking, 'NotYetMatured');
+    });
+
+    it("Should revert error NotYetMatured on restake", async function () {
+      const { staking, tokenERC20 } = await loadFixture(deploy);
+      await tokenERC20.approve(staking.target, MaxUint256);
+      const stakeAmount = 1e5;
+      const constrDuration = 16;
+
+      await staking.stake(stakeAmount, constrDuration);
+      await mine(10);
+
+      await expect(staking.restake(0, constrDuration)).to.be.revertedWithCustomError(staking, 'NotYetMatured');
     });
   });
 

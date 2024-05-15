@@ -3,34 +3,25 @@ import { CONFIG } from "./arguments";
 const { prod: DEPLOY_CONFIG } = CONFIG;
 
 async function main() {
-  const [owner] = await ethers.getSigners();
-
   const {
+    owner,
     tokenContract,
     nftContract,
     minStakeAmount,
-    startStaking,
-    maxRate,
-    halvingRate,
-    additionalRate,
-    halvingPeriod,
-    nftRateMultiplier,
+    rates,
+    periods,
     balanceBounds,
     coefficientsMultiplier,
     coefficientsLimiter
   } = DEPLOY_CONFIG;
 
   const Staking = await ethers.deployContract("Staking", [
-    owner.address,
+    owner,
     tokenContract,
     nftContract,
     minStakeAmount,
-    startStaking,
-    maxRate,
-    halvingRate,
-    additionalRate,
-    halvingPeriod,
-    nftRateMultiplier,
+    rates,
+    periods,
     balanceBounds,
     coefficientsMultiplier,
     coefficientsLimiter
