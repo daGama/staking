@@ -36,10 +36,11 @@ error NotYetStarted();
 /// Not yet matured.
 error NotYetMatured();
 
-/// APR lower then minimal value
-/// @param rate calculated rate.
-/// @param maxrate max rate.
-error InvalidAPR(uint256 rate, uint256 maxrate);
+/// Insufficient reward pool.
+error InsufficientRewardPool(uint256 available, uint256 required);
+
+/// Invalid constructor value.
+error InvalidConstructorValue(string msg);
 
 /**
  * @title Staking
@@ -75,6 +76,9 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
 
     // The total staked amount
     uint256 public totalStaked;
+
+    // The total locked balance
+    uint256 public lockedBalance;
 
     // The total staked amount
     uint256 public totalWeight;
@@ -119,6 +123,13 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         uint256[] memory coefficientsMultiplier_,
         uint256[] memory coefficientsLimiter_
     ) Ownable(initialOwner) {
+        if (coefficientsMultiplier_.length != coefficientsLimiter_.length)
+            revert InvalidConstructorValue(
+                "Lengths of coefficientsMultiplier and coefficientsLimiter are not same"
+            );
+        if (balanceBounds_.length != coefficientsMultiplier_.length - 1)
+            revert InvalidConstructorValue("Invalid balanceBounds length");
+
         tokenContract = tokenContract_;
         nftContract = nftContract_;
         minStakeAmount = minStakeAmount_;
@@ -149,13 +160,21 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
                 stakeAmount
             );
 
-        tokenContract.safeTransferFrom(msg.sender, address(this), stakeAmount);
-
         bool withNFT = hasNFT(msg.sender);
         uint256 weightAmount = _calcWeight(stakeAmount, duration, withNFT);
         uint256 rewardAmount = _calcReward(stakeAmount, weightAmount, duration);
 
+        uint256 contractBalance = tokenContract.balanceOf(address(this));
+        if (contractBalance < lockedBalance + rewardAmount)
+            revert InsufficientRewardPool(
+                contractBalance,
+                lockedBalance + rewardAmount
+            );
+
+        tokenContract.safeTransferFrom(msg.sender, address(this), stakeAmount);
+
         totalStaked += stakeAmount;
+        lockedBalance += stakeAmount + rewardAmount;
         totalWeight += weightAmount;
 
         Staker memory newStaker = Staker(
@@ -205,6 +224,13 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
             duration
         );
 
+        uint256 contractBalance = tokenContract.balanceOf(address(this));
+        if (contractBalance < lockedBalance + rewardAmount)
+            revert InsufficientRewardPool(
+                contractBalance,
+                lockedBalance + rewardAmount
+            );
+
         totalWeight -= stakes[index_].weightAmount;
         totalStaked -= unstakedAmount;
 
@@ -214,6 +240,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         stakes[index_].unstaked = true;
 
         totalWeight += weightAmount;
+        lockedBalance += rewardAmount;
         totalStaked += stakedAmount;
 
         Staker memory newStaker = Staker(
@@ -245,7 +272,12 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         stakes[index_].unstaked = true;
         uint256 unstakedAmount = stakes[index_].stakeAmount;
 
-        totalStaked -= stakes[index_].stakeAmount;
+        uint256 contractBalance = tokenContract.balanceOf(address(this));
+        if (contractBalance < lockedBalance)
+            revert InsufficientRewardPool(contractBalance, lockedBalance);
+
+        totalStaked -= unstakedAmount;
+        lockedBalance -= unstakedAmount;
         totalWeight -= stakes[index_].weightAmount;
 
         stakes[index_].stakeAmount = 0;
@@ -266,9 +298,17 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
             block.timestamp <
             stakes[index_].startTime + stakes[index_].duration * 1 weeks
         ) revert NotYetMatured();
-        stakes[index_].claimed = true;
+
         uint256 claimedAmount = stakes[index_].rewardAmount;
 
+        // Check if the contract has enough balance to cover the reward
+        uint256 contractBalance = tokenContract.balanceOf(address(this));
+        if (contractBalance < lockedBalance)
+            revert InsufficientRewardPool(contractBalance, lockedBalance);
+
+        lockedBalance -= claimedAmount;
+
+        stakes[index_].claimed = true;
         stakes[index_].rewardAmount = 0;
 
         tokenContract.safeTransfer(msg.sender, claimedAmount);

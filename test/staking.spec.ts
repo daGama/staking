@@ -2,7 +2,7 @@ import { use, expect } from 'chai';
 import BigNumber from "bignumber.js";
 import chaiBignumber from "chai-bignumber";
 use(chaiBignumber(BigNumber));
-import { ethers } from 'hardhat';
+import { ethers, network } from 'hardhat';
 import { loadFixture, mine } from '@nomicfoundation/hardhat-network-helpers';
 import {
   TestStaking, MockERC20Token, MockERC721Token,
@@ -253,6 +253,43 @@ describe("Staking contract", function () {
       await mine(10);
 
       await expect(staking.restake(0, constrDuration)).to.be.revertedWithCustomError(staking, 'NotYetMatured');
+    });
+
+    it("Should revert error InsufficientRewardPool", async function () {
+      const { staking, tokenERC20 } = await loadFixture(deploy);
+      const stakeAmount = 1e7;
+      const constrDuration = 16;
+      const reward1 = 1328000;
+      const reward2 = 1300000;
+      await tokenERC20.approve(staking.target, MaxUint256);
+
+      await staking.stake(stakeAmount, constrDuration)
+      let lockedBalance = await staking.lockedBalance();
+      expect(await staking.totalStaked()).to.equal(stakeAmount);
+      expect(lockedBalance).to.equal(stakeAmount + reward1);
+
+      await staking.stake(stakeAmount, constrDuration)
+      lockedBalance = await staking.lockedBalance()
+      expect(await staking.totalStaked()).to.equal(2*stakeAmount);
+      expect(lockedBalance).to.equal(2*stakeAmount + reward1 + reward2);
+
+      const balance = await tokenERC20.balanceOf(staking.target)
+
+      expect(balance).to.equal(STAKING_TOKEN_BALANCE + 2*stakeAmount);
+
+      const freeBalance = +(balance - lockedBalance).toString()
+      expect(freeBalance).to.equal(STAKING_TOKEN_BALANCE - reward1 - reward2);
+
+      // calc big reward and try to stake
+      const stakeMaxAmount = ERC20_TOKEN_BALANCE;
+      const duration = 26;
+      const hasNft = false;
+      const weight = (await staking.calcWeight(stakeMaxAmount, duration, hasNft)).toString();
+      const reward = (await staking.calcReward(stakeMaxAmount, weight, duration)).toString();
+
+      expect(+reward).to.be.greaterThan(freeBalance);
+
+      await expect(staking.stake(stakeMaxAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'InsufficientRewardPool');
     });
   });
 
