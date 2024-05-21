@@ -13,6 +13,7 @@ contract TestStaking is Staking {
         uint256 minStakeAmount_,
         uint256[] memory rates_,
         uint256[] memory periods_,
+        uint8[] memory durations_,
         uint256[] memory balanceBounds_,
         uint256[] memory coefficientsMultiplier_,
         uint256[] memory coefficientsLimiter_
@@ -24,6 +25,7 @@ contract TestStaking is Staking {
             minStakeAmount_,
             rates_,
             periods_,
+            durations_,
             balanceBounds_,
             coefficientsMultiplier_,
             coefficientsLimiter_

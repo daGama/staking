@@ -19,9 +19,9 @@ const config: HardhatUserConfig = {
       },
     }
   },
-  sourcify: {
-    enabled: true
-  },
+  // sourcify: {
+  //   enabled: true
+  // },
   defaultNetwork: "hardhat",
   networks: {
     //mainnet

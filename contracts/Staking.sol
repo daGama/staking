@@ -36,6 +36,9 @@ error NotYetStarted();
 /// Not yet matured.
 error NotYetMatured();
 
+/// Invalid duration.
+error InvalidDuration();
+
 /// Insufficient reward pool.
 error InsufficientRewardPool(uint256 available, uint256 required);
 
@@ -65,6 +68,9 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     // 0 - start
     // 1 - halving
     uint256[] public periods;
+
+    // Available staking durations
+    uint8[] public durations;
 
     // Coefficients to calc user rate
     uint256[] public balanceBounds;
@@ -119,6 +125,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         uint256 minStakeAmount_,
         uint256[] memory rates_,
         uint256[] memory periods_,
+        uint8[] memory durations_,
         uint256[] memory balanceBounds_,
         uint256[] memory coefficientsMultiplier_,
         uint256[] memory coefficientsLimiter_
@@ -129,6 +136,8 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
             );
         if (balanceBounds_.length != coefficientsMultiplier_.length - 1)
             revert InvalidConstructorValue("Invalid balanceBounds length");
+        if (durations_.length == 0)
+            revert InvalidConstructorValue("Invalid durations length");
 
         tokenContract = tokenContract_;
         nftContract = nftContract_;
@@ -136,9 +145,25 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         rates = rates_;
         periods.push(block.timestamp + periods_[0]);
         periods.push(block.timestamp + periods_[1]);
+        durations = durations_;
         balanceBounds = balanceBounds_;
         coefficientsMultiplier = coefficientsMultiplier_;
         coefficientsLimiter = coefficientsLimiter_;
+    }
+
+    modifier validDuration(uint8 duration) {
+        bool durationExists = false;
+        for (uint8 i = 0; i < durations.length;) {
+            if (durations[i] == duration) {
+                durationExists = true;
+                break;
+            }
+            unchecked {
+                i++;
+            }
+        }
+        if(!durationExists) revert InvalidDuration();
+        _;
     }
 
     /**
@@ -149,7 +174,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     function stake(
         uint256 stakeAmount,
         uint8 duration
-    ) public whenNotPaused nonReentrant {
+    ) public whenNotPaused nonReentrant validDuration(duration) {
         if (block.timestamp <= periods[0]) revert NotYetStarted();
         if (stakeAmount <= 0) revert AmountMustBePositive();
         if (stakeAmount < minStakeAmount)
@@ -199,7 +224,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     function restake(
         uint256 index_,
         uint8 duration
-    ) public whenNotPaused nonReentrant {
+    ) public whenNotPaused nonReentrant validDuration(duration) {
         Staker[] storage stakes = stakers[msg.sender];
         if (stakes.length < index_ + 1) revert StakeNotFound();
         if (stakes[index_].unstaked) revert AlreadyUnstaked();

@@ -10,6 +10,7 @@ async function main() {
     minStakeAmount,
     rates,
     periods,
+    durations,
     balanceBounds,
     coefficientsMultiplier,
     coefficientsLimiter
@@ -22,6 +23,7 @@ async function main() {
     minStakeAmount,
     rates,
     periods,
+    durations,
     balanceBounds,
     coefficientsMultiplier,
     coefficientsLimiter

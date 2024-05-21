@@ -32,6 +32,7 @@ describe("Staking contract", function () {
       minStakeAmount,
       rates,
       periods,
+      durations,
       balanceBounds,
       coefficientsMultiplier,
       coefficientsLimiter
@@ -44,6 +45,7 @@ describe("Staking contract", function () {
       minStakeAmount,
       rates,
       periods,
+      durations,
       balanceBounds,
       coefficientsMultiplier,
       coefficientsLimiter
@@ -122,6 +124,14 @@ describe("Staking contract", function () {
       await tokenERC20.connect(user).approve(staking.target, stakeAmount);
 
       await expect(staking.connect(user).stake(stakeAmount + 1, constrDuration)).to.be.revertedWithCustomError(staking, 'InsufficientBalance');
+    });
+
+    it("Should revert error InvalidDuration", async function () {
+      const { staking } = await loadFixture(deploy);
+      const stakeAmount = 1e5;
+      const constrDuration = 1;
+
+      await expect(staking.stake(stakeAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'InvalidDuration');
     });
   });
 
