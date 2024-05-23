@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {Staking} from "../Staking.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/governance/TimelockController.sol";
 
 contract TestStaking is Staking {
     constructor(
@@ -16,7 +17,8 @@ contract TestStaking is Staking {
         uint8[] memory durations_,
         uint256[] memory balanceBounds_,
         uint256[] memory coefficientsMultiplier_,
-        uint256[] memory coefficientsLimiter_
+        uint256[] memory coefficientsLimiter_,
+        TimelockController timeLock_
     )
         Staking(
             initialOwner,
@@ -28,7 +30,8 @@ contract TestStaking is Staking {
             durations_,
             balanceBounds_,
             coefficientsMultiplier_,
-            coefficientsLimiter_
+            coefficientsLimiter_,
+            timeLock_
         )
     {}
 

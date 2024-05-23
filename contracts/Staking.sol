@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import "@openzeppelin/contracts/token/ERC721/extensions/IERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/governance/TimelockController.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import {ABDKMath64x64} from "./ABDKMath64x64.sol";
@@ -44,6 +45,9 @@ error InsufficientRewardPool(uint256 available, uint256 required);
 
 /// Invalid constructor value.
 error InvalidConstructorValue(string msg);
+
+/// Only Timelock.
+error OnlyTimelockAccess();
 
 /**
  * @title Staking
@@ -89,6 +93,8 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     // The total staked amount
     uint256 public totalWeight;
 
+    TimelockController public timeLock;
+
     // A struct to store the staking information of a user
     struct Staker {
         uint256 stakeAmount; // The amount of tokens staked by the user
@@ -128,7 +134,8 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         uint8[] memory durations_,
         uint256[] memory balanceBounds_,
         uint256[] memory coefficientsMultiplier_,
-        uint256[] memory coefficientsLimiter_
+        uint256[] memory coefficientsLimiter_,
+        TimelockController timeLock_
     ) Ownable(initialOwner) {
         if (coefficientsMultiplier_.length != coefficientsLimiter_.length)
             revert InvalidConstructorValue(
@@ -149,11 +156,12 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         balanceBounds = balanceBounds_;
         coefficientsMultiplier = coefficientsMultiplier_;
         coefficientsLimiter = coefficientsLimiter_;
+        timeLock = timeLock_;
     }
 
     modifier validDuration(uint8 duration) {
         bool durationExists = false;
-        for (uint8 i = 0; i < durations.length;) {
+        for (uint8 i = 0; i < durations.length; ) {
             if (durations[i] == duration) {
                 durationExists = true;
                 break;
@@ -162,7 +170,12 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
                 i++;
             }
         }
-        if(!durationExists) revert InvalidDuration();
+        if (!durationExists) revert InvalidDuration();
+        _;
+    }
+
+    modifier onlyTimeLock() {
+        if(msg.sender != address(timeLock)) revert OnlyTimelockAccess();
         _;
     }
 
@@ -497,14 +510,48 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     /**
      * @dev The function that allows the owner to pause the staking contract
      */
-    function pause() external onlyOwner {
+    function pause() external onlyTimeLock {
         _pause();
     }
 
     /**
      * @dev The function that allows the owner to unpause the staking contract
      */
-    function unpause() external onlyOwner {
+    function unpause() external onlyTimeLock {
         _unpause();
+    }
+
+    function schedulePause() external onlyOwner {
+        bytes memory data = abi.encodeWithSignature("pause()");
+        timeLock.schedule(
+            address(this),
+            0,
+            data,
+            bytes32(0),
+            bytes32(0),
+            timeLock.getMinDelay()
+        );
+    }
+
+    function scheduleUnpause() external onlyOwner {
+        bytes memory data = abi.encodeWithSignature("unpause()");
+        timeLock.schedule(
+            address(this),
+            0,
+            data,
+            bytes32(0),
+            bytes32(0),
+            timeLock.getMinDelay()
+        );
+    }
+
+    function executePause() external {
+        bytes memory data = abi.encodeWithSignature("pause()");
+        timeLock.execute(address(this), 0, data, bytes32(0), bytes32(0));
+    }
+
+    function executeUnpause() external {
+        bytes memory data = abi.encodeWithSignature("unpause()");
+        timeLock.execute(address(this), 0, data, bytes32(0), bytes32(0));
     }
 }
