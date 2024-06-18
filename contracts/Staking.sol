@@ -22,6 +22,9 @@ error LowStakingAmount(uint256 amount, uint256 minimum);
 /// @param required requested amount to transfer.
 error InsufficientBalance(uint256 available, uint256 required);
 
+/// Reward too small.
+error RewardTooSmall();
+
 /// Already claimed.
 error AlreadyClaimed();
 
@@ -66,6 +69,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     // 0 - maxRate
     // 1 - halvingRate
     // 2 - additionalRate
+    // 3 - maxAdditionalRate
     uint256[] public rates;
 
     // Staking start and halving periods
@@ -137,9 +141,9 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         uint256[] memory coefficientsLimiter_,
         TimelockController timeLock_
     ) Ownable(initialOwner) {
-        if (coefficientsMultiplier_.length != coefficientsLimiter_.length)
+        if (durations_.length != coefficientsLimiter_.length)
             revert InvalidConstructorValue(
-                "Lengths of coefficientsMultiplier and coefficientsLimiter are not same"
+                "Lengths of durations and coefficientsLimiter are not same"
             );
         if (balanceBounds_.length != coefficientsMultiplier_.length - 1)
             revert InvalidConstructorValue("Invalid balanceBounds length");
@@ -175,7 +179,7 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     }
 
     modifier onlyTimeLock() {
-        if(msg.sender != address(timeLock)) revert OnlyTimelockAccess();
+        if (msg.sender != address(timeLock)) revert OnlyTimelockAccess();
         _;
     }
 
@@ -200,7 +204,9 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
 
         bool withNFT = hasNFT(msg.sender);
         uint256 weightAmount = _calcWeight(stakeAmount, duration, withNFT);
-        uint256 rewardAmount = _calcReward(stakeAmount, weightAmount, duration);
+        uint256 rewardAmount = _calcReward(stakeAmount, weightAmount, duration, withNFT);
+
+        if (rewardAmount == 0) revert RewardTooSmall();
 
         uint256 contractBalance = tokenContract.balanceOf(address(this));
         if (contractBalance < lockedBalance + rewardAmount)
@@ -259,8 +265,11 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         uint256 rewardAmount = _calcReward(
             stakedAmount,
             weightAmount,
-            duration
+            duration,
+            withNFT
         );
+
+        if (rewardAmount == 0) revert RewardTooSmall();
 
         uint256 contractBalance = tokenContract.balanceOf(address(this));
         if (contractBalance < lockedBalance + rewardAmount)
@@ -389,11 +398,16 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     function _calcReward(
         uint256 stakeAmount,
         uint256 weightAmount,
-        uint8 duration
+        uint8 duration,
+        bool hasNFT_
     ) internal view returns (uint256) {
         uint256 diff = _calcRateDiff(stakeAmount, weightAmount, duration);
-        uint256 limiter = _getCoefficientLimiter(stakeAmount);
-        uint256 finalApr = 100 * (getMaxRate() - limiter) + diff / rates[2];
+        uint256 limiter = _getCoefficientLimiter(duration);
+        uint256 adds = diff / rates[2];
+        adds = adds > 100 * rates[3] ? 100 * rates[3] : adds;
+        if(hasNFT_) adds += 100 * rates[3];
+        uint256 yearApr = 100 * (getMaxRate() - limiter) + adds;
+        uint256 finalApr = (duration * yearApr) / 52;
 
         return (finalApr * stakeAmount) / 10000;
     }
@@ -483,19 +497,19 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     }
 
     /**
-     * @dev The function that calculates limiter coefficient by stake amount
-     * @param stakeAmount The amount of tokens staked by the user
+     * @dev The function that calculates limiter coefficient by duration
+     * @param duration The duration
      * @return The limiter coefficient
      */
     function _getCoefficientLimiter(
-        uint256 stakeAmount
+        uint256 duration
     ) internal view returns (uint256) {
-        uint256 length = balanceBounds.length;
+        uint256 length = durations.length;
         for (uint256 i = 0; i < length; ) {
-            uint256 balanceBound = balanceBounds[i];
+            uint256 dur = durations[i];
             uint256 coefficientLimiter = coefficientsLimiter[i];
 
-            if (balanceBound > stakeAmount) {
+            if (dur >= duration) {
                 return coefficientLimiter;
             }
 

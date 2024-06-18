@@ -62,9 +62,10 @@ contract TestStaking is Staking {
     function calcReward(
         uint256 stakeAmount,
         uint256 weightAmount,
-        uint8 duration
+        uint8 duration,
+        bool hasNFT_
     ) public view returns (uint256) {
-        return _calcReward(stakeAmount, weightAmount, duration);
+        return _calcReward(stakeAmount, weightAmount, duration, hasNFT_);
     }
 
     function calcRateDiff(

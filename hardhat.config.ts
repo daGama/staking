@@ -24,28 +24,19 @@ const config: HardhatUserConfig = {
   // },
   defaultNetwork: "hardhat",
   networks: {
-    //mainnet
-    // mainnet: {
-    //   url: `https://mainnet.infura.io/v3/${INFURA_KEY}`,
-    //   accounts: [PRIVATE_KEY]
-    // },
-    // polygon: {
-    //   url: `https://polygon-mainnet.infura.io/v3/${INFURA_KEY}`,
-    //   accounts: [PRIVATE_KEY]
-    // },
+    mainnet: {
+      url: `https://mainnet.infura.io/v3/${INFURA_KEY}`,
+      accounts: [PRIVATE_KEY]
+    },
     arbitrum: {
       url: `https://arbitrum-mainnet.infura.io/v3/${INFURA_KEY}`,
       accounts: [PRIVATE_KEY]
     },
     // //testnet
-    // sepolia: {
-    //   url: `https://sepolia.infura.io/v3/${INFURA_KEY}`,
-    //   accounts: [PRIVATE_KEY]
-    // },
-    // mumbai: {
-    //   url: `https://polygon-mumbai.infura.io/v3/${INFURA_KEY}`,
-    //   accounts: [PRIVATE_KEY]
-    // }
+    sepolia: {
+      url: `https://sepolia.infura.io/v3/${INFURA_KEY}`,
+      accounts: [PRIVATE_KEY]
+    },
     arbitrumSepolia: {
       url: `https://arbitrum-sepolia.infura.io/v3/${INFURA_KEY}`,
       accounts: [PRIVATE_KEY]
@@ -53,6 +44,8 @@ const config: HardhatUserConfig = {
   },
   etherscan: {
       apiKey: {
+        mainnet: ETHERSCAN_KEY,
+        sepolia: ETHERSCAN_KEY,
         arbitrum: ARBISCAN_KEY,
         arbitrumSepolia: ARBISCAN_KEY,
     }

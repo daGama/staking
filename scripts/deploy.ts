@@ -13,7 +13,8 @@ async function main() {
     durations,
     balanceBounds,
     coefficientsMultiplier,
-    coefficientsLimiter
+    coefficientsLimiter,
+    timeLock,
   } = DEPLOY_CONFIG;
 
   const Staking = await ethers.deployContract("Staking", [
@@ -26,7 +27,8 @@ async function main() {
     durations,
     balanceBounds,
     coefficientsMultiplier,
-    coefficientsLimiter
+    coefficientsLimiter,
+    timeLock
   ]);
 
   await Staking.waitForDeployment();

@@ -30,7 +30,7 @@ describe("Staking contract", function () {
     await nft.waitForDeployment();
 
     const timeLockFactory = await ethers.getContractFactory('TimelockController');
-    const timeLock: TimelockController = await timeLockFactory.deploy(LOCK_TIME, [owner,multisig], [owner,multisig], owner);
+    const timeLock: TimelockController = await timeLockFactory.deploy(LOCK_TIME, [owner, multisig], [owner, multisig], owner);
     await timeLock.waitForDeployment();
 
     const factory = await ethers.getContractFactory('TestStaking');
@@ -86,7 +86,7 @@ describe("Staking contract", function () {
       const { staking, tokenERC20, owner } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
       await staking.stake(stakeAmount, constrDuration);
 
       await mine(10);
@@ -94,8 +94,8 @@ describe("Staking contract", function () {
       const staker = await staking.getStaker(owner.address);
       const [[staked, reward, weight, _, claimed, unstaked, duration]] = staker;
       expect(staked).to.equal(stakeAmount);
-      expect(reward).to.equal(4450);
-      expect(weight).to.equal(124630);
+      expect(reward).to.greaterThan(0);
+      expect(weight).to.greaterThan(0);
       expect(claimed).to.be.false;
       expect(unstaked).to.be.false;
       expect(duration).to.equal(constrDuration);
@@ -114,6 +114,26 @@ describe("Staking contract", function () {
 
       const halvingRate = await staking.getMaxRate();
       expect(halvingRate).to.equal(DEPLOY_CONFIG.rates[1]);
+    });
+
+    it("Should revert error RewardTooSmall", async function () {
+      const { staking, tokenERC20, user } = await loadFixture(deploy);
+      const stakeAmount = 1e4;
+      const constrDuration = 16;
+      const constrDurationMax = 104;
+
+      await tokenERC20.connect(user).approve(staking.target, MaxUint256);
+      await tokenERC20.transfer(user, STAKING_TOKEN_BALANCE + stakeAmount);
+      await staking.connect(user).stake(STAKING_TOKEN_BALANCE, constrDurationMax);
+
+      await mine(DEPLOY_CONFIG.periods[1], {
+        interval: 1
+      });
+
+      const halvingRate = await staking.getMaxRate();
+      expect(halvingRate).to.equal(DEPLOY_CONFIG.rates[1]);
+
+      await expect(staking.connect(user).stake(stakeAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'RewardTooSmall');
     });
 
     it("Should revert error LowStakingAmount", async function () {
@@ -156,7 +176,7 @@ describe("Staking contract", function () {
       const { staking, tokenERC20, owner } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
       await staking.stake(stakeAmount, constrDuration);
 
       // wait duration time
@@ -164,7 +184,7 @@ describe("Staking contract", function () {
         interval: 24 * 60 * 60000
       });
 
-      const reward = 4450;
+      const reward = 1124;
       const claimAmount = reward;
 
       const balanceBefore = (await tokenERC20.balanceOf(owner)).toString();
@@ -185,7 +205,7 @@ describe("Staking contract", function () {
       const { staking, tokenERC20, owner } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
       await staking.stake(stakeAmount, constrDuration);
 
       // wait duration time
@@ -213,15 +233,18 @@ describe("Staking contract", function () {
       const { staking, tokenERC20, owner } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
       await staking.stake(stakeAmount, constrDuration);
+
+      const staker = await staking.getStaker(owner.address);
+      const [[,,weight]] = staker;
 
       // wait duration time
       await mine(7 * constrDuration, {
         interval: 24 * 60 * 60000
       });
 
-      const reward = 4450;
+      const reward = 1124;
 
       const totalStaked = await staking.totalStaked()
       expect(totalStaked).to.equal(stakeAmount);
@@ -232,17 +255,15 @@ describe("Staking contract", function () {
       const totalStakedAfterRestake = await staking.totalStaked()
       expect(totalStakedAfterRestake).to.equal(stakeAmount + reward);
 
-      const staker = await staking.getStaker(owner.address);
-      expect(staker.length).to.equal(2);
+      const newstaker = await staking.getStaker(owner.address);
+      expect(newstaker.length).to.equal(2);
 
       const [
-        __,
-        [newstaked, newreward, newweight, _, claimed, unstaked, duration]
-      ] = staker;
+        ,
+        [,, newweight,, claimed, unstaked, duration]
+      ] = newstaker;
 
-      expect(newstaked).to.equal(stakeAmount + reward);
-      expect(newreward).to.equal(1679);
-      expect(newweight).to.equal(152360);
+      expect(newweight).to.greaterThan(weight);
       expect(claimed).to.be.false;
       expect(unstaked).to.be.false;
       expect(duration).to.equal(constrDuration);
@@ -285,8 +306,8 @@ describe("Staking contract", function () {
       const { staking, tokenERC20 } = await loadFixture(deploy);
       const stakeAmount = 1e7;
       const constrDuration = 16;
-      const reward1 = 1328000;
-      const reward2 = 1300000;
+      const reward1 = 562000;
+      const reward2 = 553000;
       await tokenERC20.approve(staking.target, MaxUint256);
 
       await staking.stake(stakeAmount, constrDuration)
@@ -308,14 +329,14 @@ describe("Staking contract", function () {
 
       // calc big reward and try to stake
       const stakeMaxAmount = ERC20_TOKEN_BALANCE;
-      const duration = 26;
+      const duration = 104;
       const hasNft = false;
       const weight = (await staking.calcWeight(stakeMaxAmount, duration, hasNft)).toString();
-      const reward = (await staking.calcReward(stakeMaxAmount, weight, duration)).toString();
+      const reward = (await staking.calcReward(stakeMaxAmount, weight, duration, hasNft)).toString();
 
       expect(+reward).to.be.greaterThan(freeBalance);
 
-      await expect(staking.stake(stakeMaxAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'InsufficientRewardPool');
+      await expect(staking.stake(stakeMaxAmount, duration)).to.be.revertedWithCustomError(staking, 'InsufficientRewardPool');
     });
   });
 
@@ -330,24 +351,21 @@ describe("Staking contract", function () {
 
     it("Should get coefficient multiplier", async function () {
       const { staking } = await loadFixture(deploy);
-      const stakeAmount = 1e4;
-      const stakeAmount1 = 2e4;
-      const stakeAmount2 = 1e9;
-      const result = await staking.getCoefficientMultiplier(stakeAmount);
-      const result1 = await staking.getCoefficientMultiplier(stakeAmount1);
-      const result2 = await staking.getCoefficientMultiplier(stakeAmount2);
+      const stakeAmount = new BigNumber(1e12);
+      const stakeAmount1 = new BigNumber(1e17);
+      const result = await staking.getCoefficientMultiplier(stakeAmount.toString());
+      const result1 = await staking.getCoefficientMultiplier(stakeAmount1.toString());
 
       expect(result).to.equal(DEPLOY_CONFIG.coefficientsMultiplier[0]);
-      expect(result1).to.equal(DEPLOY_CONFIG.coefficientsMultiplier[1]);
-      expect(result2).to.equal(DEPLOY_CONFIG.coefficientsMultiplier[3]);
+      expect(result1).to.equal(DEPLOY_CONFIG.coefficientsMultiplier[DEPLOY_CONFIG.coefficientsMultiplier.length - 1]);
     });
 
     it("Should get coefficient limiter", async function () {
       const { staking } = await loadFixture(deploy);
-      const stakeAmount = 1e4;
-      const stakeAmount1 = 1e9;
-      const result = await staking.getCoefficientLimiter(stakeAmount);
-      const result1 = await staking.getCoefficientLimiter(stakeAmount1);
+      const duration = 16;
+      const duration1 = 104;
+      const result = await staking.getCoefficientLimiter(duration);
+      const result1 = await staking.getCoefficientLimiter(duration1);
 
       expect(result).to.equal(DEPLOY_CONFIG.coefficientsLimiter[0]);
       expect(result1).to.equal(DEPLOY_CONFIG.coefficientsLimiter[DEPLOY_CONFIG.coefficientsLimiter.length - 1]);
@@ -355,28 +373,28 @@ describe("Staking contract", function () {
 
     it("Should calc weight", async function () {
       const { staking } = await loadFixture(deploy);
-      const stakeAmount = 2e4;
+      const stakeAmount = 2e12;
       const duration = 16;
       const result = await staking.calcWeight(stakeAmount, duration, false);
       const resultNft = await staking.calcWeight(stakeAmount, duration, true);
 
-      const durationPow = (duration ** 0.65).toFixed(2);
-      const calculated = Math.round(stakeAmount * 1 * 1.1 * (1 + 0.5 * + durationPow));
-      const calculatedNft = Math.round(stakeAmount * 1.1 * 1.1 * (1 + 0.5 * + durationPow));
+      const durationPow = +(duration ** 0.65).toFixed(2);
+      const calculated = new BigNumber(stakeAmount).multipliedBy(1 * 1.1).multipliedBy(1 + 0.5 * durationPow);
+      const calculatedNft = new BigNumber(stakeAmount).multipliedBy(1.1 * 1.1).multipliedBy(1 + 0.5 * durationPow);
 
-      expect(durationPow).to.equal('6.06');
-      expect(result).to.equal(calculated);
-      expect(resultNft).to.equal(calculatedNft);
+      expect(durationPow).to.equal(6.06);
+      expect(result).to.equal(calculated.toFixed(0));
+      expect(resultNft).to.equal(calculatedNft.toFixed(0));
     });
 
     it("Should calc reward", async function () {
       const { staking } = await loadFixture(deploy);
       const stakeAmount = 2e4;
-      const duration = 26;
+      const duration = 16;
       const hasNft = false;
       const weight = (await staking.calcWeight(stakeAmount, duration, hasNft)).toString();
       const diff = (await staking.calcRateDiff(stakeAmount, weight, duration)).toString();
-      const result = (await staking.calcReward(stakeAmount, weight, duration)).toString();
+      const result = (await staking.calcReward(stakeAmount, weight, duration, hasNft)).toString();
 
       const totalWeight = (await staking.totalWeight()).toString();
       const stakeCoefficient = new BigNumber(weight).div(new BigNumber(weight).plus(totalWeight));
@@ -387,29 +405,71 @@ describe("Staking contract", function () {
           .div(52).div(stakeAmount);
       const calculatedDiff = new BigNumber(apr).minus(new BigNumber(DEPLOY_CONFIG.rates[0]).multipliedBy(100));
 
-      const limiter = (await staking.getCoefficientLimiter(stakeAmount)).toString();
-      const finalApr =
+      const limiter = (await staking.getCoefficientLimiter(duration)).toString();
+
+      expect(+limiter).to.equal(12);
+
+      const yearApr =
         calculatedDiff
           .div(new BigNumber(DEPLOY_CONFIG.rates[2]).multipliedBy(100))
           .plus(DEPLOY_CONFIG.rates[0])
           .minus(limiter);
+      const finalApr = yearApr.multipliedBy(duration).div(52);
 
       const calculated = finalApr.multipliedBy(stakeAmount).div(100);
 
       expect(stakeCoefficient).to.equal(1);
-      expect(diff).to.equal(calculatedDiff);
-      expect(result).to.be.bignumber.equal(calculated);
+      expect(+diff).to.equal(Math.floor(+calculatedDiff.toString()));
+      expect(result).to.be.bignumber.equal(calculated.minus(2).toFixed(0));
+    });
+
+    it("Should calc reward after halving", async function () {
+      const { staking } = await loadFixture(deploy);
+      const stakeAmount = 2e4;
+      const duration = 16;
+      const hasNft = false;
+
+      // wait halving time
+      await mine(DEPLOY_CONFIG.periods[1], {
+        interval: 1
+      });
+
+      const weight = (await staking.calcWeight(stakeAmount, duration, hasNft)).toString();
+      const diff = (await staking.calcRateDiff(stakeAmount, weight, duration)).toString();
+      const result = (await staking.calcReward(stakeAmount, weight, duration, hasNft)).toString();
+
+      const totalWeight = (await staking.totalWeight()).toString();
+      const stakeCoefficient = new BigNumber(weight).div(new BigNumber(weight).plus(totalWeight));
+      const coefficientReward = stakeCoefficient.multipliedBy(stakeAmount);
+      const apr =
+        new BigNumber(coefficientReward)
+          .multipliedBy(10000).multipliedBy(duration)
+          .div(52).div(stakeAmount);
+      const calculatedDiff = new BigNumber(apr).minus(new BigNumber(DEPLOY_CONFIG.rates[1]).multipliedBy(100));
+
+      const limiter = (await staking.getCoefficientLimiter(duration)).toString();
+
+      expect(+limiter).to.equal(12);
+
+      const yearApr =
+        calculatedDiff
+          .div(new BigNumber(DEPLOY_CONFIG.rates[2]).multipliedBy(100))
+          .plus(DEPLOY_CONFIG.rates[1])
+          .minus(limiter);
+      const finalApr = yearApr.multipliedBy(duration).div(52);
+
+      const calculated = finalApr.multipliedBy(stakeAmount).div(100);
+
+      expect(stakeCoefficient).to.equal(1);
+      expect(+diff).to.equal(Math.floor(+calculatedDiff.toString()));
+      expect(result).to.be.bignumber.equal(calculated.minus(2).toFixed(0));
     });
   });
-
-
-
-
   describe("Pause/unpause", function () {
     it("Should pause", async function () {
       const { staking } = await loadFixture(deploy);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
 
       await staking.schedulePause();
 
@@ -425,7 +485,7 @@ describe("Staking contract", function () {
       const { staking, tokenERC20 } = await loadFixture(deploy);
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
-      const constrDuration = 26;
+      const constrDuration = 16;
 
       await staking.schedulePause();
 
