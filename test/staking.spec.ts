@@ -15,7 +15,7 @@ const { test: DEPLOY_CONFIG } = CONFIG;
 
 const ERC20_TOKEN_BALANCE = 1e8;
 const STAKING_TOKEN_BALANCE = 1e7;
-const LOCK_TIME = 2 * 24 * 3600;
+const LOCK_TIME = 60;
 
 describe("Staking contract", function () {
   async function deploy() {
@@ -84,6 +84,9 @@ describe("Staking contract", function () {
   describe("Stake", function () {
     it("Should stake tokens and emit event", async function () {
       const { staking, tokenERC20, owner } = await loadFixture(deploy);
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
       const constrDuration = 16;
@@ -116,6 +119,51 @@ describe("Staking contract", function () {
       expect(halvingRate).to.equal(DEPLOY_CONFIG.rates[1]);
     });
 
+    it("Should change periods", async function () {
+      const { staking, user, owner, tokenERC20 } = await loadFixture(deploy);
+      const add = 100;
+      const newPeriods = [DEPLOY_CONFIG.periods[0]+ add, DEPLOY_CONFIG.periods[1] + add];
+      await tokenERC20.approve(staking.target, MaxUint256);
+      const stakeAmount = 2e4;
+      const constrDuration = 16;
+      await staking.scheduleChangePeriods(newPeriods);
+      await mine(2, {
+        interval: LOCK_TIME
+      });
+      await expect(staking.executeChangePeriods(newPeriods)).to.be.emit(staking, "ChangePeriods").withArgs(newPeriods);
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      })
+      await expect(staking.connect(user).stake(stakeAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'NotYetStarted');
+      await mine(2, {
+        interval: add
+      })
+      await expect(staking.stake(stakeAmount, constrDuration)).to.emit(staking, "Staked").withArgs(owner, stakeAmount);
+
+    });
+
+    it("Should revert error AlreadyStarted", async function () {
+      const { staking, user } = await loadFixture(deploy);
+      const newPeriods = [DEPLOY_CONFIG.periods[0]+ 100, DEPLOY_CONFIG.periods[1] + 100];
+      await staking.scheduleChangePeriods(newPeriods);
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
+      await expect(staking.executeChangePeriods(newPeriods)).to.be.revertedWithCustomError(staking, "AlreadyStarted");
+      
+
+    });
+
+    it("Should revert error InvalidPeriods", async function () {
+      const { staking, user } = await loadFixture(deploy);
+      const newPeriods = [DEPLOY_CONFIG.periods[0]+ 100];
+      await staking.scheduleChangePeriods(newPeriods);
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
+      await expect(staking.executeChangePeriods(newPeriods)).to.be.revertedWithCustomError(staking, "InvalidPeriods").withArgs("Invalid periods length");
+    });
+
     it("Should revert error RewardTooSmall", async function () {
       const { staking, tokenERC20, user } = await loadFixture(deploy);
       const stakeAmount = 1e4;
@@ -124,6 +172,9 @@ describe("Staking contract", function () {
 
       await tokenERC20.connect(user).approve(staking.target, MaxUint256);
       await tokenERC20.transfer(user, STAKING_TOKEN_BALANCE + stakeAmount);
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.connect(user).stake(STAKING_TOKEN_BALANCE, constrDurationMax);
 
       await mine(DEPLOY_CONFIG.periods[1], {
@@ -140,7 +191,9 @@ describe("Staking contract", function () {
       const { staking } = await loadFixture(deploy);
       const stakeAmount = 1;
       const constrDuration = 16;
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await expect(staking.stake(stakeAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'LowStakingAmount');
     });
 
@@ -148,7 +201,9 @@ describe("Staking contract", function () {
       const { staking } = await loadFixture(deploy);
       const stakeAmount = 0;
       const constrDuration = 16;
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await expect(staking.stake(stakeAmount, constrDuration)).to.be.revertedWithCustomError(staking, 'AmountMustBePositive');
     });
 
@@ -158,7 +213,9 @@ describe("Staking contract", function () {
       const constrDuration = 16;
       await tokenERC20.transferFrom(owner.address, user.address, stakeAmount);
       await tokenERC20.connect(user).approve(staking.target, stakeAmount);
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await expect(staking.connect(user).stake(stakeAmount + 1, constrDuration)).to.be.revertedWithCustomError(staking, 'InsufficientBalance');
     });
 
@@ -177,6 +234,9 @@ describe("Staking contract", function () {
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
       const constrDuration = 16;
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration);
 
       // wait duration time
@@ -206,6 +266,9 @@ describe("Staking contract", function () {
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
       const constrDuration = 16;
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration);
 
       // wait duration time
@@ -234,6 +297,9 @@ describe("Staking contract", function () {
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 2e4;
       const constrDuration = 16;
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration);
 
       const staker = await staking.getStaker(owner.address);
@@ -283,7 +349,9 @@ describe("Staking contract", function () {
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 1e5;
       const constrDuration = 16;
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration);
       await mine(10);
 
@@ -295,7 +363,9 @@ describe("Staking contract", function () {
       await tokenERC20.approve(staking.target, MaxUint256);
       const stakeAmount = 1e5;
       const constrDuration = 16;
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration);
       await mine(10);
 
@@ -309,7 +379,9 @@ describe("Staking contract", function () {
       const reward1 = 562000;
       const reward2 = 553000;
       await tokenERC20.approve(staking.target, MaxUint256);
-
+      await mine(2, {
+        interval: DEPLOY_CONFIG.periods[0]
+      });
       await staking.stake(stakeAmount, constrDuration)
       let lockedBalance = await staking.lockedBalance();
       expect(await staking.totalStaked()).to.equal(stakeAmount);
@@ -474,7 +546,7 @@ describe("Staking contract", function () {
       await staking.schedulePause();
 
       await mine(2, {
-        interval: LOCK_TIME
+        interval: DEPLOY_CONFIG.periods[0]
       });
 
       await staking.executePause();
@@ -490,7 +562,7 @@ describe("Staking contract", function () {
       await staking.schedulePause();
 
       await mine(2, {
-        interval: LOCK_TIME
+        interval: DEPLOY_CONFIG.periods[0]
       });
 
       await staking.executePause();
@@ -500,7 +572,7 @@ describe("Staking contract", function () {
       await staking.scheduleUnpause();
 
       await mine(2, {
-        interval: LOCK_TIME
+        interval: DEPLOY_CONFIG.periods[0]
       });
 
       await staking.executeUnpause();

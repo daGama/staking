@@ -31,6 +31,9 @@ error AlreadyClaimed();
 /// Already claimed.
 error AlreadyUnstaked();
 
+/// Already started.
+error AlreadyStarted();
+
 /// Stake not found.
 error StakeNotFound();
 
@@ -48,6 +51,9 @@ error InsufficientRewardPool(uint256 available, uint256 required);
 
 /// Invalid constructor value.
 error InvalidConstructorValue(string msg);
+
+/// Invalid periods value.
+error InvalidPeriods(string msg);
 
 /// Only Timelock.
 error OnlyTimelockAccess();
@@ -125,6 +131,9 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
     // An event to log when a user restakes tokens
     event Restaked(address indexed staker, uint256 stakeAmount);
 
+    // An event to log when the periods changes
+    event ChangePeriods(uint256[] _per);
+
     /**
      * @dev The constructor function that sets the token contracts and the max reward rate
      */
@@ -149,6 +158,8 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
             revert InvalidConstructorValue("Invalid balanceBounds length");
         if (durations_.length == 0)
             revert InvalidConstructorValue("Invalid durations length");
+        if (periods_.length != 2)
+            revert InvalidPeriods("Invalid periods length");
 
         tokenContract = tokenContract_;
         nftContract = nftContract_;
@@ -535,6 +546,14 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
         _unpause();
     }
 
+    function changePeriods(uint256[] calldata _per) external onlyTimeLock {
+        if (_per.length < 2) revert InvalidPeriods("Invalid periods length");
+        if (block.timestamp >= periods[0]) revert AlreadyStarted();
+        periods[0] = block.timestamp + _per[0];
+        periods[1] = block.timestamp + _per[1];
+        emit ChangePeriods(_per);
+    }
+
     function schedulePause() external onlyOwner {
         bytes memory data = abi.encodeWithSignature("pause()");
         timeLock.schedule(
@@ -557,6 +576,28 @@ contract Staking is Ownable, ReentrancyGuard, Pausable {
             bytes32(0),
             timeLock.getMinDelay()
         );
+    }
+
+
+    function scheduleChangePeriods(uint256[] calldata periods_) external onlyOwner {
+        bytes memory data = abi.encodeWithSignature(
+            "changePeriods(uint256[])",
+            periods_);
+        timeLock.schedule(
+            address(this),
+            0,
+            data,
+            bytes32(0),
+            bytes32(0),
+            timeLock.getMinDelay()
+        );
+    }
+
+    function executeChangePeriods(uint256[] calldata periods_) external {
+        bytes memory data = abi.encodeWithSignature(
+            "changePeriods(uint256[])",
+            periods_);
+        timeLock.execute(address(this), 0, data, bytes32(0), bytes32(0));
     }
 
     function executePause() external {
